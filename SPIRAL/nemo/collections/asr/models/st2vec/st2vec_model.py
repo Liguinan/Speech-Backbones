@@ -228,11 +228,12 @@ class ST2VecEncoder(nn.Module):
             specs, _, _ = apply_mask(self.mask_cfg, specs, specs_mask, self.mask_emb)
             specs = specs.transpose(1, 2)
 
-        features, feature_lens, _ = self.feature_encoder(specs, specs_len)
+        #features, feature_lens, _ = self.feature_encoder(specs, specs_len)
+        features, feature_lens, hidden_feat = self.feature_encoder(specs, specs_len)
         # [B, D, T] => [B, T, D]
         features = features.transpose(1, 2)
         if features_only:
-            return features, feature_lens
+            return features, feature_lens, hidden_feat
 
         assert mask
 

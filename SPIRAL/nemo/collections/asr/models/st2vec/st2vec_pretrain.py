@@ -131,16 +131,47 @@ class ST2VecPretrainModel(ModelPT):
         if accuracy is not None:
             self.log('test_accuracy', accuracy, prog_bar=True, on_step=False, on_epoch=True, sync_dist=False)
 
-    def _step(self, batch):
+    # def _step(self, batch):
+    #     if len(batch) == 4:
+    #         audio_signal, audio_lengths, p_audio_signal, p_audio_lengths = batch
+    #     else:
+    #         audio_signal, audio_lengths = batch
+    #         p_audio_signal, p_audio_lengths = None, None
+    #
+    #     logits, targets, sampled_negatives, _, prob_ppl_loss, cur_temp, prob_ppl = self(
+    #         source=audio_signal, source_lens=audio_lengths, p_source=p_audio_signal, p_source_lens=p_audio_lengths
+    #     )
+    #     if self.loss_type == 'neg_cos_sim':
+    #         loss = self.loss(predictions=logits, targets=targets)
+    #         contrastive_loss, prob_ppl_loss, accuracy = None, None, None
+    #     else:
+    #         assert self.loss_type == 'wav2vec'
+    #         loss, contrastive_loss, _, prob_ppl_loss, accuracy = self.loss(
+    #             logits=logits,
+    #             targets=targets,
+    #             negatives=sampled_negatives,
+    #             prob_ppl_loss=prob_ppl_loss,
+    #             feature_loss=None,
+    #             compute_accuracy=not self.training
+    #         )
+    #     return loss, contrastive_loss, prob_ppl_loss, cur_temp, prob_ppl, accuracy
+    def _step(self, batch, extract_feature=False):
         if len(batch) == 4:
             audio_signal, audio_lengths, p_audio_signal, p_audio_lengths = batch
         else:
             audio_signal, audio_lengths = batch
             p_audio_signal, p_audio_lengths = None, None
 
-        logits, targets, sampled_negatives, _, prob_ppl_loss, cur_temp, prob_ppl = self(
-            source=audio_signal, source_lens=audio_lengths, p_source=p_audio_signal, p_source_lens=p_audio_lengths
-        )
+        if not extract_feature:
+            logits, targets, sampled_negatives, _, prob_ppl_loss, cur_temp, prob_ppl = self(
+                source=audio_signal, source_lens=audio_lengths, p_source=p_audio_signal, p_source_lens=p_audio_lengths
+            )
+        else:
+            return self(
+                source=audio_signal, source_lens=audio_lengths, p_source=None, p_source_lens=None,
+                mask=False, features_only=True
+            )
+
         if self.loss_type == 'neg_cos_sim':
             loss = self.loss(predictions=logits, targets=targets)
             contrastive_loss, prob_ppl_loss, accuracy = None, None, None
@@ -155,6 +186,34 @@ class ST2VecPretrainModel(ModelPT):
                 compute_accuracy=not self.training
             )
         return loss, contrastive_loss, prob_ppl_loss, cur_temp, prob_ppl, accuracy
+
+    @torch.no_grad()
+    def extract_feature(self):
+        # Model's mode and device
+        mode = self.training
+        device = next(self.parameters()).device
+        preprocessor = self.st2vec_encoder.wav2spec
+        pad_to_value = preprocessor.featurizer.pad_to
+
+        extracted_feat = []
+
+        try:
+            # preprocessor.featurizer.pad_to = 0
+            # switch model to evaluation mode
+            self.eval()
+            # Freeze the encoder and decoder modules
+            # Work in tmp directory -will store manifest file there
+            for test_batch in self._test_dl:
+                test_batch = [d_i.to(device) for d_i in test_batch]
+                _, _, hidden_feat = self._step(test_batch, extracted_feat=True)
+                extracted_feat.append(hidden_feat)
+                print('extract feat: {}/{}'.format(len(extracted_feat), len(self._test_dl)))
+        finally:
+            # set mode back to its original value
+            self.train(mode=mode)
+            preprocessor.featurizer.pad_to = pad_to_value
+        return extracted_feat
+
 
     @classmethod
     def list_available_models(cls) -> Optional[PretrainedModelInfo]:

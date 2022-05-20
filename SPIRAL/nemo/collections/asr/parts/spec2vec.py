@@ -96,9 +96,12 @@ class FeatureEncoder(nn.Module):
             # [B, C, T, F] => [B, F, C, T] => [B, FxC/D, T]
             output = output.permute(0, 3, 1, 2).reshape(b, f * c, t)
 
+        conv_feat = None
+        trfm_feat = None
         for module in self.block_modules:
             if isinstance(module, ConvNormAct):
                 output, length, pad_mask = module(output, length, pad_mask=pad_mask)
+                conv_feat = output, length
             else:
                 assert isinstance(module, TransformerEncoder)
                 # [B, D, T] => [B, T, D]
@@ -106,8 +109,20 @@ class FeatureEncoder(nn.Module):
                 output = module(output, padding_mask=pad_mask)
                 # [B, T, D] => [B, D, T]
                 output = output.transpose(1, 2)
+                trfm_feat = output, length
+        if conv_feat:
+            conv_output, conv_output_len = conv_feat
+            conv_output = conv_output.detach().cpu().numpy()
+            conv_output_len = conv_output_len.detach().cpu().numpy()
+            conv_feat = conv_output, conv_output_len
+        if trfm_feat:
+            trfm_output, trfm_output_len = trfm_feat
+            trfm_output = trfm_output.detach().cpu().numpy()
+            trfm_output_len = trfm_output_len.detach().cpu().numpy()
+            trfm_feat = trfm_output, trfm_output_len
 
-        return output, length, None
+        return output, length, {'conv_feat': conv_feat, 'trfm_feat': trfm_feat}
+         # return output, length, None
 
     def bn_eval(self):
         for m in self.bn_moudles:
