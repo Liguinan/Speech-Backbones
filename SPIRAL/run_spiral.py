@@ -51,6 +51,7 @@ def main(argv=None):
     parser.add_argument('--dev_data_dup_factor', type=int, default=0)
     parser.add_argument('--use_teacher_encoder', type=str2bool, default=False)
     parser.add_argument('--save_logits', type=str2bool, default=False)
+    parser.add_argument('--extract_feature', type=str2bool, default=False)
 
     args = parser.parse_args(args=argv)
     print('training args: {}'.format(args))

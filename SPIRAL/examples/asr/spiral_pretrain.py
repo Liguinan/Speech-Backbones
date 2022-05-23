@@ -122,6 +122,18 @@ def main(cfg, args):
 
     if args.run_mode == 'train':
         trainer.fit(model)
+    elif args.extract_feature:
+        from pathlib import Path
+        import pickle
+
+        model.cuda()
+        feats = model.extract_feature()
+        model_save_dir = Path(args.model_save_dir)
+        model_save_dir.mkdir()
+        feat_fp = model_save_dir / 'feat.pkl'
+        with feat_fp.open(mode='wb') as output_file:
+            print('save features to: {}'.format(feat_fp))
+            pickle.dump(feats, output_file)
     else:
         assert args.run_mode == 'test'
         assert model.prepare_test(trainer)
