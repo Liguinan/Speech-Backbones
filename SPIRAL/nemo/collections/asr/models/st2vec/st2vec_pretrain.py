@@ -188,7 +188,8 @@ class ST2VecPretrainModel(ModelPT):
         return loss, contrastive_loss, prob_ppl_loss, cur_temp, prob_ppl, accuracy
 
     @torch.no_grad()
-    def extract_feature(self):
+    def extract_feature(self, model_save_dir):
+        import pickle
         # Model's mode and device
         mode = self.training
         device = next(self.parameters()).device
@@ -196,6 +197,7 @@ class ST2VecPretrainModel(ModelPT):
         pad_to_value = preprocessor.featurizer.pad_to
 
         extracted_feat = []
+        extracted_feat_cnt = 1
 
         try:
             # preprocessor.featurizer.pad_to = 0
@@ -203,12 +205,25 @@ class ST2VecPretrainModel(ModelPT):
             self.eval()
             # Freeze the encoder and decoder modules
             # Work in tmp directory -will store manifest file there
+
+            start = extracted_feat_cnt
             for test_batch in self._test_dl:
                 test_batch = [d_i.to(device) for d_i in test_batch]
-                _, _, hidden_feat = self._step(test_batch, extracted_feat=True)
+                _, _, hidden_feat = self._step(test_batch, extract_feature=True)
                 extracted_feat.append(hidden_feat)
-                print('extract feat: {}/{}'.format(len(extracted_feat), len(self._test_dl)))
+                print('extract feat: {}/{}'.format(extracted_feat_cnt, len(self._test_dl)))
+                if extracted_feat_cnt % 500 == 0 or extracted_feat_cnt == len(self._test_dl):  # split to save
+                    feat_fp = model_save_dir / 'feat_{}-{}.pkl'.format(start, extracted_feat_cnt)
+                    with feat_fp.open(mode='wb') as output_file:
+                        print('save features to :{}'.format(feat_fp))
+                        pickle.dump(extracted_feat, output_file)
+                    extracted_feat = []  # clear the list
+                    start = extracted_feat_cnt + 1  # set the chunk start index
+
+                extracted_feat_cnt += 1
         finally:
+            assert extracted_feat_cnt == len(self._test_dl) + 1, f'extracted_feat_cnt is {extracted_feat_cnt}, ' \
+                                                                 f'dataset_cnt is {len(self._test_dl)}'
             # set mode back to its original value
             self.train(mode=mode)
             preprocessor.featurizer.pad_to = pad_to_value

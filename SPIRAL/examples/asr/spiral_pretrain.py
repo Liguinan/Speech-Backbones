@@ -127,13 +127,14 @@ def main(cfg, args):
         import pickle
 
         model.cuda()
-        feats = model.extract_feature()
         model_save_dir = Path(args.model_save_dir)
         model_save_dir.mkdir()
-        feat_fp = model_save_dir / 'feat.pkl'
-        with feat_fp.open(mode='wb') as output_file:
-            print('save features to: {}'.format(feat_fp))
-            pickle.dump(feats, output_file)
+        print(model.extract_feature(model_save_dir))
+        print('all features saved to: {}'.format(model_save_dir))
+        # feat_fp = model_save_dir / 'feat.pkl'
+        # with feat_fp.open(mode='wb') as output_file:
+        #     print('save features to: {}'.format(feat_fp))
+        #     pickle.dump(feats, output_file)
     else:
         assert args.run_mode == 'test'
         assert model.prepare_test(trainer)
